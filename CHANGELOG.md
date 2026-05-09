@@ -1,5 +1,11 @@
 # @clamp-sh/mcp
 
+## 4.0.1
+
+### Patch Changes
+
+- [`ab64d81`](https://github.com/clamp-sh/clamp/commit/ab64d8171e7ecf3bbf4aa425044ebd82c27dc4ae) Thanks [@sbj-o](https://github.com/sbj-o)! - Refresh package description on npm. The previous text said "Sixteen analytics tools" — the actual count is now 27 (plus growing), and the tool categories were missing `errors` and `cohorts`. Drops the specific number in favour of listing categories so the description stays accurate as new tools land.
+
 ## 4.0.0
 
 ### Major Changes
