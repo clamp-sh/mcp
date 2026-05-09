@@ -1,7 +1,7 @@
 {
   "name": "@clamp-sh/mcp",
   "version": "4.0.0",
-  "description": "Clamp MCP server. Sixteen analytics tools for AI agents — traffic, breakdowns, pages, engagement, events, revenue, sessions, funnels, alerts. Stdio for local agents and HTTP for remote.",
+  "description": "Clamp MCP server. Analytics tools for AI agents — traffic, breakdowns, pages, engagement, events, errors, revenue, sessions, funnels, cohorts, alerts. Stdio for local agents and HTTP for remote.",
   "license": "MIT",
   "homepage": "https://clamp.sh/mcp",
   "repository": {
