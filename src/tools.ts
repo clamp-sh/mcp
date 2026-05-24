@@ -1094,22 +1094,30 @@ Pairs with: \`errors.list\` (source of the anonymous_id and timestamp pair); \`u
   server.registerTool(
     "traffic.timeseries",
     {
-      description: `Event counts over time as date buckets. Returns [{ date, count }] sorted ascending. Granularity is automatic based on period length (hourly for ≤2 days, daily for ≤90 days, weekly for ≤365 days, monthly beyond) and can be overridden via \`granularity\`. Filterable to a specific event name (defaults to "pageview") and a single custom property key/value pair.
+      description: `Traffic metrics over time as date buckets. Returns [{ date, count }] sorted ascending, where \`count\` is the chosen metric's value per bucket. By default charts pageview counts; set \`metric\` to chart unique visitors, sessions, bounce rate, or average session duration instead — the same KPIs as traffic.overview, broken out over time. Alternatively set \`event\` to count occurrences of a custom event. Granularity is automatic based on period length (hourly for ≤2 days, daily for ≤90 days, weekly for ≤365 days, monthly beyond) and can be overridden via \`granularity\`.
 
 Examples:
 - "pageview trend last week" → period="7d"
+- "unique visitors per day this month" → metric="visitors", period="30d"
+- "is bounce rate climbing?" → metric="bounce_rate", period="90d"
 - "signups per day this month" → event="signup", period="30d", granularity="day"
 - "hourly pageviews yesterday" → period="1d", granularity="hour"
 
-Limitations: forcing granularity="hour" over a 90-day period produces hundreds of buckets and may be truncated server-side. Buckets with no matching events return zero (the series does not skip missing dates).`,
+Limitations: \`metric\` and \`event\` are mutually exclusive — when \`metric\` is set it always scopes to pageviews and ignores \`event\`/\`property\`/\`value\`. \`bounce_rate\` is a percentage (e.g. 47.2), \`avg_duration\` is in seconds. Forcing granularity="hour" over a 90-day period produces hundreds of buckets and may be truncated server-side. Buckets with no matching events return zero (the series does not skip missing dates).`,
       inputSchema: {
         project_id: projectIdParam,
       period: periodParam,
+      metric: z
+        .enum(["pageviews", "visitors", "sessions", "bounce_rate", "avg_duration"])
+        .optional()
+        .describe(
+          'Which traffic metric to chart over time, mirroring the overview KPIs: "pageviews", "visitors" (unique), "sessions", "bounce_rate" (% of single-pageview sessions), or "avg_duration" (avg session length in seconds). When set, the metric is always scoped to pageviews and `event`/`property`/`value` are ignored. Omit to chart raw counts of a custom `event` instead.',
+        ),
       event: z
         .string()
         .optional()
         .describe(
-          'Event name to chart. Defaults to "pageview". Use any custom event name to see its trend over time.',
+          'Event name to chart raw counts of (defaults to "pageview"). Ignored when `metric` is set. Use any custom event name to see its trend over time.',
         ),
       granularity: z
         .enum(["hour", "day", "week", "month"])
