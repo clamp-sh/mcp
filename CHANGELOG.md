@@ -1,5 +1,11 @@
 # @clamp-sh/mcp
 
+## 4.1.0
+
+### Minor Changes
+
+- [`5cb03d9`](https://github.com/clamp-sh/clamp/commit/5cb03d9705cfab3650219a5c6b24c5c32fe81eff) Thanks [@sbj-o](https://github.com/sbj-o)! - `traffic.timeseries` gains a `metric` parameter so agents can chart unique visitors, sessions, bounce rate, and average session duration over time — not just pageview or custom-event counts. Omitting `metric` keeps the existing event-count behaviour, so this is fully backward compatible.
+
 ## 4.0.1
 
 ### Patch Changes
