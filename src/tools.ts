@@ -74,7 +74,39 @@ const utmContentParam = z.string().optional().describe(UTM_CONTENT_DESC);
 const utmTermParam = z.string().optional().describe(UTM_TERM_DESC);
 const channelParam = z.string().optional().describe(CHANNEL_DESC);
 const countryParam = z.string().optional().describe(COUNTRY_DESC);
+const regionParam = z
+  .string()
+  .optional()
+  .describe(
+    'Administrative region inside a country (e.g. "California", "Bavaria"). Case-sensitive; must match the stored region exactly. Use traffic.breakdown(dimension="region") to discover values.',
+  );
+const cityParam = z
+  .string()
+  .optional()
+  .describe(
+    'City name (e.g. "San Francisco", "London"). Case-sensitive; must match the stored value. Use traffic.breakdown(dimension="city") to discover values.',
+  );
 const deviceTypeParam = z.string().optional().describe(DEVICE_TYPE_DESC);
+const browserParam = z
+  .string()
+  .optional()
+  .describe(
+    'Browser family (e.g. "Chrome", "Safari", "Firefox"). Use traffic.breakdown(dimension="browser") to discover the exact stored values.',
+  );
+const browserVersionParam = z
+  .string()
+  .optional()
+  .describe('Browser version string (e.g. "120.0"). Case-sensitive.');
+const osParam = z
+  .string()
+  .optional()
+  .describe(
+    'Operating system family (e.g. "macOS", "iOS", "Windows", "Android"). Use traffic.breakdown(dimension="os") to discover stored values.',
+  );
+const osVersionParam = z
+  .string()
+  .optional()
+  .describe('OS version string (e.g. "14.2"). Case-sensitive.');
 const referrerHostParam = z.string().optional().describe(REFERRER_HOST_DESC);
 
 const projectIdParam = z
@@ -97,7 +129,13 @@ const commonFilterShape = {
   utm_term: utmTermParam,
   referrer_host: referrerHostParam,
   country: countryParam,
+  region: regionParam,
+  city: cityParam,
   device_type: deviceTypeParam,
+  browser: browserParam,
+  browser_version: browserVersionParam,
+  os: osParam,
+  os_version: osVersionParam,
   channel: channelParam,
 } as const;
 
@@ -189,6 +227,11 @@ const trafficOverviewOutput = {
 const eventCountRowSchema = z.object({
   name: z.string(),
   count: z.number(),
+  /** Unique visitors who fired the event. Set only on the unfiltered listing. */
+  visitors: z.number().optional(),
+  /** Previous-period totals, only present when called with compare=true. */
+  prev_count: z.number().optional(),
+  prev_visitors: z.number().optional(),
   group_value: z.string().optional(),
 });
 
@@ -669,7 +712,7 @@ Limitations: bounce_rate and avg_duration are derived from the SDK's pageview_en
   server.registerTool(
     "events.list",
     {
-      description: `Get custom event counts. Without a \`name\` filter, returns every event name in the period with its total count and unique-visitor count (excludes "pageview" and the SDK-internal "pageview_end"). With a \`name\` filter, returns the count for that single event, optionally filtered by a custom property key/value pair and grouped by another property key. Custom events are tracked client-side via clamp.track("event_name", { key: "value" }) or server-side via @clamp-sh/analytics/server.
+      description: `Get custom event counts. Without a \`name\` filter, returns every event name in the period with its total count and unique-visitor count (excludes SDK-internal events — \`pageview\`, \`pageview_end\`, \`web_vital\`, \`section_viewed\`, and \`$error\` — since they aren't "custom" in any user-meaningful sense). To see one of those, pass it explicitly via \`name\`. With \`compare=true\` (only meaningful on the unfiltered list), each row also carries \`prev_count\` and \`prev_visitors\` from the equal-length previous period — events absent now but present before appear with count=0 (the "dead event" signal). With a \`name\` filter, returns the count for that single event, optionally filtered by a custom property key/value pair and grouped by another property key. Custom events are tracked client-side via clamp.track("event_name", { key: "value" }) or server-side via @clamp-sh/analytics/server.
 
 Property values can be strings, numbers, or booleans (each stored in a separate column). When filtering or grouping by a numeric or boolean property, set \`value_type\` / \`group_by_type\` so the lookup hits the right column — otherwise the default ("string") will silently miss native number/boolean data. Use the project's \`event-schema.yaml\` to know each property's type.
 
@@ -722,6 +765,13 @@ Limitations: only one property/value pair per call. group_by only works when a n
           .describe(
             'Type of the group_by property. Defaults to "string". Set to "number"/"boolean" for numeric/boolean properties; results come back stringified ("5", "true") for transport.',
           ),
+        compare: z
+          .coerce
+          .boolean()
+          .optional()
+          .describe(
+            'When true (only meaningful on the unfiltered listing — no `name`, no `group_by`), each row also carries `prev_count` and `prev_visitors` from the equal-length previous period. Events absent now but present before appear with count=0 (dead-event signal). Defaults to false.',
+          ),
         ...commonFilterShape,
       },
       outputSchema: eventsListOutput,
@@ -765,11 +815,11 @@ Use it to compare declared vs reality:
 - \`properties[key].length > 1\` → type-column collision; one of the call sites is sending the wrong type
 
 Examples:
-- "what events are firing in production" → no params (defaults to 30d, excludes pageview/pageview_end)
+- "what events are firing in production" → no params (defaults to 30d, excludes SDK-internal events)
 - "did the spec drift this week" → period="7d"
-- "include automatic pageview events too" → include_pageviews=true
+- "include the SDK's automatic events too" → include_pageviews=true
 
-Limitations: returns keys + types only, no property *values*. \`occurrences\` is row-level (each event firing counts), not unique visitors. Excludes \`pageview\` and \`pageview_end\` by default since the SDK extension owns their schema.
+Limitations: returns keys + types only, no property *values*. \`occurrences\` is row-level (each event firing counts), not unique visitors. Excludes SDK-internal events (\`pageview\`, \`pageview_end\`, \`web_vital\`, \`section_viewed\`, \`$error\`) by default since the SDK owns their schema.
 
 Pairs with: \`events.list\` for per-event volume context (this tool also returns \`count\`, but \`events.list\` supports filters and grouping); the local \`event-schema.yaml\` for declared-vs-observed diff.`,
       inputSchema: {
@@ -779,7 +829,7 @@ Pairs with: \`events.list\` for per-event volume context (this tool also returns
           .coerce
           .boolean()
           .optional()
-          .describe("Include pageview and pageview_end in the output. Defaults to false."),
+          .describe("Include SDK-internal events (pageview, pageview_end, web_vital, section_viewed, $error) in the output. Defaults to false."),
       },
       outputSchema: eventsObservedSchemaOutput,
       annotations: { readOnlyHint: true },
