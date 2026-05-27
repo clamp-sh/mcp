@@ -1,5 +1,11 @@
 # @clamp-sh/mcp
 
+## 4.2.0
+
+### Minor Changes
+
+- [`061837d`](https://github.com/clamp-sh/clamp/commit/061837d2a5fbbbf948a2bfd1b6461f66019588a7) Thanks [@sbj-o](https://github.com/sbj-o)! - Every tool that accepts common filters can now scope queries by `region`, `city`, `browser`, `browser_version`, `os`, and `os_version` — previously you could only filter by country and device_type at the geo/device level. An agent can now answer questions like "how does conversion look in Berlin specifically?" or "is Safari 17 bouncing harder than Chrome 120?" without falling back to a manual breakdown sweep.
+
 ## 4.1.0
 
 ### Minor Changes
