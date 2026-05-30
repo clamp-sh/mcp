@@ -1,8 +1,8 @@
 <p align="center">
-  <a href="https://www.npmjs.com/package/@clamp-sh/mcp"><img src="https://img.shields.io/npm/v/@clamp-sh/mcp?style=flat-square&color=B8E847&labelColor=1a1a1a" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@clamp-sh/mcp"><img src="https://img.shields.io/npm/dm/@clamp-sh/mcp?style=flat-square&color=B8E847&labelColor=1a1a1a" alt="npm downloads" /></a>
+  <a href="https://www.npmjs.com/package/@clamp-sh/mcp"><img src="https://img.shields.io/npm/v/@clamp-sh/mcp?style=flat-square&color=8cc1c5&labelColor=1a1a1a" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@clamp-sh/mcp"><img src="https://img.shields.io/npm/dm/@clamp-sh/mcp?style=flat-square&color=8cc1c5&labelColor=1a1a1a" alt="npm downloads" /></a>
   <a href="https://github.com/clamp-sh/mcp/actions/workflows/ci.yml"><img src="https://github.com/clamp-sh/mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/npm/l/@clamp-sh/mcp?style=flat-square&color=B8E847&labelColor=1a1a1a" alt="license" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/@clamp-sh/mcp?style=flat-square&color=8cc1c5&labelColor=1a1a1a" alt="license" /></a>
   <a href="https://glama.ai/mcp/servers/clamp-sh/mcp"><img src="https://glama.ai/mcp/servers/clamp-sh/mcp/badges/score.svg" alt="mcp MCP server" /></a>
 </p>
 
