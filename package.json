@@ -1,24 +1,35 @@
 {
   "name": "@clamp-sh/mcp",
   "version": "4.2.0",
-  "description": "Clamp MCP server. Analytics tools for AI agents — traffic, breakdowns, pages, engagement, events, errors, revenue, sessions, funnels, cohorts, alerts. Stdio for local agents and HTTP for remote.",
+  "description": "Analytics MCP server for Clamp Analytics. Gives Claude, Cursor, VS Code, Windsurf, and Cline tools for traffic, pages, events, revenue, errors, funnels, cohorts, and alerts. Stdio + hosted Remote MCP.",
   "license": "MIT",
   "homepage": "https://clamp.sh/mcp",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/clamp-sh/clamp.git",
-    "directory": "packages/mcp"
+    "url": "git+https://github.com/clamp-sh/mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/clamp-sh/clamp/issues"
+    "url": "https://github.com/clamp-sh/mcp/issues"
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
     "analytics",
+    "web-analytics",
+    "product-analytics",
     "ai-agents",
     "claude",
+    "claude-code",
+    "claude-desktop",
     "cursor",
+    "vscode",
+    "windsurf",
+    "cline",
+    "funnels",
+    "cohorts",
+    "revenue-analytics",
+    "remote-mcp",
     "clamp"
   ],
   "main": "dist/index.mjs",
