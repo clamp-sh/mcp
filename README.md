@@ -104,10 +104,11 @@ Get your API key from the Clamp dashboard under **Settings → API Keys**. Keys 
 | `pages.engagement` | Per-page metrics with `view`: `summary`, `engagement` (adds engagement seconds and bounce rate), `sections` (per-section view counts for one pathname; needs the section-views SDK extension). |
 | `events.list` | Custom event counts with property filtering and grouping. |
 | `events.observed_schema` | The actual fired-event signature with per-property type observations. Diff against a local `event-schema.yaml` to surface schema drift. |
+| `events.property_values` | Top distinct string-typed values a property has taken on a specific event. Use to discover the value space before defining a cohort filter or running `events.list` with `property=`. |
 | `revenue.sum` | Sum revenue from Money-typed event properties. Split by currency, optionally grouped by any dimension. |
 | `sessions.paths` | Aggregate session paths: top entry → exit pairs with pages per session and duration. |
 | `users.journey` | Chronological session-and-event reconstruction for one anonymous ID. |
-| `cohorts.create` / `cohorts.list` / `cohorts.retention` / `cohorts.compare` | Define cohorts by event + period + filter; query retention curves; compare two cohorts side-by-side. |
+| `cohorts.create` / `cohorts.list` / `cohorts.retention` / `cohorts.compare` | Define cohorts by event + period + filter; query retention curves; compare 2–10 cohorts side-by-side on the same retention windows. |
 | `errors.list` / `errors.groups` / `errors.timeline` / `errors.context` | Recent errors, fingerprint-grouped errors with affected-user counts, error rate over time, and breadcrumbs leading to a single error. |
 | `projects.list` | List all projects this credential can access. |
 | `docs.search` | Keyword-search the Clamp docs index. |

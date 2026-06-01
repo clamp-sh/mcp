@@ -255,6 +255,18 @@ const eventsObservedSchemaOutput = {
   events: z.array(observedEventSchema),
 };
 
+const propertyValueRowSchema = z.object({
+  value: z.string(),
+  count: z.number(),
+});
+
+const eventsPropertyValuesOutput = {
+  event: z.string(),
+  property: z.string(),
+  period: z.string(),
+  values: z.array(propertyValueRowSchema),
+};
+
 const revenueRowSchema = z.object({
   group_value: z.string().optional(),
   currency: z.string(),
@@ -447,8 +459,8 @@ const cohortsListOutput = {
 
 const retentionPointSchema = z.object({
   period: z.string(),
-  count: z.number(),
-  rate: z.string(),
+  retained: z.number(),
+  rate: z.number(),
 });
 
 const cohortsRetentionOutput = {
@@ -458,16 +470,13 @@ const cohortsRetentionOutput = {
 };
 
 const cohortsCompareOutput = {
-  a: z.object({
-    cohort: z.string(),
-    size: z.number(),
-    retention: z.array(retentionPointSchema),
-  }),
-  b: z.object({
-    cohort: z.string(),
-    size: z.number(),
-    retention: z.array(retentionPointSchema),
-  }),
+  cohorts: z.array(
+    z.object({
+      cohort: z.string(),
+      size: z.number(),
+      retention: z.array(retentionPointSchema),
+    }),
+  ),
 };
 
 const okOutput = { ok: z.boolean() };
@@ -838,6 +847,70 @@ Pairs with: \`events.list\` for per-event volume context (this tool also returns
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
       return out(await api(`/analytics/${p.projectId}/observed-schema${qs(rest)}`));
+    },
+  );
+
+  // ── Tool: events.property_values ───────────────────
+  server.registerTool(
+    "events.property_values",
+    {
+      description: `Top distinct *values* a string-typed property has taken on a specific event in the period, ranked by occurrence count. Useful when you need to know the value space before filtering — e.g. cohort definitions, segment filters, "what values does \`plan\` take on \`signup\`?".
+
+Response shape:
+\`\`\`
+{
+  event: "signup",
+  property: "plan",
+  period: "30d",
+  values: [
+    { value: "free", count: 412 },
+    { value: "pro",  count: 138 },
+    { value: "growth", count: 22 }
+  ]
+}
+\`\`\`
+
+Examples:
+- "what plans do signups come from" → event="signup", property="plan"
+- "which countries hit the checkout event" → event="checkout", property="country" (only if you instrument it as a property; otherwise use traffic.breakdown)
+- "what \`source\` values does the lead event carry" → event="lead", property="source"
+
+Limitations: STRING properties only — same scope as cohort filter values (cohort filtering is string-equality only). Numeric / boolean / money properties are out of scope. Results are capped at \`limit\` (default 50, max 200) so very high-cardinality properties (user_id, session_id, URLs) are truncated to the top-N by count. Events without the property at all are skipped — only rows where the property is present and non-empty contribute.
+
+Pairs with: \`events.observed_schema\` to discover which properties an event actually fires; \`cohorts.create\` to scope a cohort by a specific value of those.`,
+      inputSchema: {
+        project_id: projectIdParam,
+        event: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe(
+            'Event name (e.g. "signup", "checkout_completed"). Required — values are scoped to one event at a time.',
+          ),
+        property: z
+          .string()
+          .min(1)
+          .max(128)
+          .describe(
+            'Property key on the event (e.g. "plan", "source"). Required. Only string-typed properties are surfaced; pass a numeric/boolean property name and you\'ll get an empty `values` array.',
+          ),
+        period: periodParam,
+        limit: z
+          .coerce
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Max distinct values to return, ranked by count desc (1-200). Defaults to 50."),
+      },
+      outputSchema: eventsPropertyValuesOutput,
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project_id, ...rest }) => {
+      const p = resolveProject(project_id);
+      if (isErr(p)) return p;
+      return out(await api(`/analytics/${p.projectId}/property-values${qs(rest)}`));
     },
   );
 
@@ -1285,7 +1358,7 @@ Limitations:
 - Membership is computed at query time, so very large cohorts cost on every retention call.
 - Names must be lowercase alphanumeric with hyphens / underscores.
 
-Pairs with: \`cohorts.retention\` to read the curve once the cohort is created; \`cohorts.compare\` for two-cohort side-by-side reads; \`cohorts.list\` to discover existing cohort handles.`,
+Pairs with: \`events.property_values\` to discover valid filter values before creating; \`cohorts.retention\` to read the curve once the cohort is created; \`cohorts.compare\` to stack 2–10 cohorts side-by-side; \`cohorts.list\` to discover existing cohort handles.`,
       inputSchema: {
         project_id: projectIdParam,
       name: z
@@ -1371,7 +1444,7 @@ Examples:
 
 Limitations: retention measures any non-pageview-end event presence. Custom retention metrics (e.g. "retained = fired purchase event") are not in 0.x. The numerator is computed per-day, so windows like "30d" return only day-30 activity. Cohort size is the denominator and is included in the response so consumers can apply sample-size discipline.
 
-Pairs with: \`cohorts.compare\` for two-cohort side-by-side; \`cohorts.list\` to discover available cohort names.`,
+Pairs with: \`cohorts.compare\` to stack 2–10 cohorts side-by-side at the same windows; \`cohorts.list\` to discover available cohort names.`,
       inputSchema: {
         project_id: projectIdParam,
       name: z.string().min(1).describe("Cohort name to query."),
@@ -1394,22 +1467,30 @@ Pairs with: \`cohorts.compare\` for two-cohort side-by-side; \`cohorts.list\` to
   server.registerTool(
     "cohorts.compare",
     {
-      description: `Compare two saved cohorts side-by-side on retention. Returns each cohort's size and retention curve over the same period set, so you can read "did this week's signups retain better than last week's?" or "is this experiment cohort behaving differently than control?" without composing the rates manually.
+      description: `Compare 2–10 saved cohorts side-by-side on retention. Returns each cohort's size and retention curve over the same period set, so you can read "did this week's signups retain better than last week's?", "is this experiment cohort behaving differently than control?", or stack a few quarters' cohorts to spot a structural retention trend — without composing the rates manually.
+
+Order matters: the first name is treated as the primary; downstream renderings (dashboard, summaries) read deltas relative to it. Duplicates are silently deduplicated.
 
 Examples:
-- "did April 14 signups retain better than April 7" → a="signups_apr_14", b="signups_apr_07"
-- "are pro-plan signups stickier than free" → a="pro_signups_q2", b="free_signups_q2"
-- "compare two onboarding variants out to 4 weeks" → a="onboarding_v1", b="onboarding_v2", periods="1w,2w,4w"
+- "did April 14 signups retain better than April 7" → names="signups_apr_14,signups_apr_07"
+- "are pro-plan signups stickier than free" → names="pro_signups_q2,free_signups_q2"
+- "compare two onboarding variants out to 4 weeks" → names="onboarding_v1,onboarding_v2", periods="1w,2w,4w"
+- "three-arm experiment retention" → names="control,variant_a,variant_b"
+- "is signup retention improving quarter-over-quarter" → names="signups_q1,signups_q2,signups_q3,signups_q4"
 
-Limitations: only two cohorts at a time. The same retention windows are applied to both — there's no way to use different windows per side. Sample-size caveats apply per cohort; check both \`size\` values before reading the rate delta.`,
+Limitations: at most 10 cohorts per call. The same retention windows are applied to every cohort — there's no way to use different windows per slot. Sample-size caveats apply per cohort; check each \`size\` value before reading rate deltas (small cohorts make differences look meaningful when they aren't). Stacking many cohorts increases the multiple-comparisons risk — a divergent-looking row in a 5-way compare may just be random variation; commit to a hypothesis before reading.`,
       inputSchema: {
         project_id: projectIdParam,
-      a: z.string().min(1).describe("Name of the first cohort."),
-      b: z.string().min(1).describe("Name of the second cohort."),
-      periods: z
-        .string()
-        .optional()
-        .describe('Comma-separated retention windows, same format as cohorts.retention.'),
+        names: z
+          .string()
+          .min(1)
+          .describe(
+            'Comma-separated cohort names, 2–10 entries. First name is treated as the primary. Example: "signups_apr_14,signups_apr_07" or "control,variant_a,variant_b".',
+          ),
+        periods: z
+          .string()
+          .optional()
+          .describe('Comma-separated retention windows, same format as cohorts.retention.'),
       },
       outputSchema: cohortsCompareOutput,
       annotations: { readOnlyHint: true },
