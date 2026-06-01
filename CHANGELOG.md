@@ -1,5 +1,25 @@
 # @clamp-sh/mcp
 
+## 5.0.0
+
+### Major Changes
+
+- [`1c86981`](https://github.com/clamp-sh/clamp/commit/1c8698116ecad179e23d7c6e9b5792ca7b81b0f4) Thanks [@sbj-o](https://github.com/sbj-o)! - **Breaking:** `cohorts.compare` input changed from `a`/`b` (two cohort names) to `names` (comma-separated list of 2–10 cohort names). Output changed from `{ a, b }` to `{ cohorts: [...] }` in caller order. Migration:
+
+  ```
+  // before
+  cohorts.compare({ a: "signups_apr_14", b: "signups_apr_07" })
+
+  // after
+  cohorts.compare({ names: "signups_apr_14,signups_apr_07" })
+  ```
+
+  The change unlocks 3-way variant tests, quarter-over-quarter trend stacks, and any other N-way retention comparison that previously required multiple paired calls. The first name in the list is treated as the primary; downstream renderings read deltas relative to it.
+
+### Minor Changes
+
+- [`1c86981`](https://github.com/clamp-sh/clamp/commit/1c8698116ecad179e23d7c6e9b5792ca7b81b0f4) Thanks [@sbj-o](https://github.com/sbj-o)! - Add `events.property_values` — top distinct string-typed property values for a (event, property) pair in the period. Lets agents discover the value space before defining a cohort filter or running `events.list`, e.g. answering "what plan tiers do signups come from?" without scraping listing output.
+
 ## 4.2.0
 
 ### Minor Changes
