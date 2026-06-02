@@ -1394,7 +1394,7 @@ Examples:
 Limitations:
 - **Event-based definitions only in 0.x.** Behavior cohorts ("did X then Y in order"), exclusion cohorts ("fired X but not Y"), and time-relative cohorts ("did X within N days of signup") aren't supported. The triggering event + period + property-filter shape covers ~95% of practical use cases.
 - Membership is computed at query time, so very large cohorts cost on every retention call.
-- Names must be lowercase alphanumeric with hyphens / underscores.
+- Names must be lowercase alphanumeric with hyphens / underscores, and unique within a project — a duplicate-name create returns 409; use \`cohorts.delete\` first or pick a new name. Cohort definitions are immutable after creation; to change the event/period/filter, delete and re-create.
 
 Pairs with: \`events.property_values\` to discover valid filter values before creating; \`cohorts.retention\` to read the curve once the cohort is created; \`cohorts.compare\` to stack 2–10 cohorts side-by-side; \`cohorts.list\` to discover existing cohort handles.`,
       inputSchema: {
@@ -1427,7 +1427,9 @@ Pairs with: \`events.property_values\` to discover valid filter values before cr
         .describe("Event-based cohort definition."),
       },
       outputSchema: cohortsCreateOutput,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      // Not idempotent: with the project_id/name UNIQUE constraint, a
+      // retry with the same name now returns 409 rather than overwriting.
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
     async ({ project_id, name, definition }) => {
       const p = resolveProject(project_id);
