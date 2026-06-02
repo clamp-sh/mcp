@@ -108,7 +108,8 @@ Get your API key from the Clamp dashboard under **Settings → API Keys**. Keys 
 | `revenue.sum` | Sum revenue from Money-typed event properties. Split by currency, optionally grouped by any dimension. |
 | `sessions.paths` | Aggregate session paths: top entry → exit pairs with pages per session and duration. |
 | `users.journey` | Chronological session-and-event reconstruction for one anonymous ID. |
-| `cohorts.create` / `cohorts.list` / `cohorts.retention` / `cohorts.compare` | Define cohorts by event + period + filter; query retention curves; compare 2–10 cohorts side-by-side on the same retention windows. |
+| `cohorts.create` / `cohorts.list` / `cohorts.retention` / `cohorts.compare` / `cohorts.delete` | Define cohorts by event + period + filter; query retention curves; compare 2–10 cohorts side-by-side on the same retention windows; delete a saved cohort by name (definitions are immutable, so delete + re-create is the rename/restructure flow). |
+| `events.property_values` | Top distinct string-typed values a property has taken on a specific event. Use to discover the value space before defining a cohort filter or running `events.list` with `property=`. |
 | `errors.list` / `errors.groups` / `errors.timeline` / `errors.context` | Recent errors, fingerprint-grouped errors with affected-user counts, error rate over time, and breadcrumbs leading to a single error. |
 | `projects.list` | List all projects this credential can access. |
 | `docs.search` | Keyword-search the Clamp docs index. |
@@ -117,8 +118,9 @@ Get your API key from the Clamp dashboard under **Settings → API Keys**. Keys 
 
 | Tool | What it does |
 |---|---|
-| `funnels.create` | Define and immediately evaluate a multi-step conversion funnel. Steps accept property predicates: `cta_click[location=hero][plan=pro]`. |
+| `funnels.create` | Define and immediately evaluate a multi-step conversion funnel. Steps accept property predicates: `cta_click[location=hero][plan=pro]`. Names must be unique within a project — a duplicate-name call returns 409. |
 | `funnels.list` | List funnels or fetch one with cohort filters (country, channel, device, UTM). |
+| `funnels.delete` | Delete a saved funnel by name (definitions are immutable, so delete + re-create is the rename/restructure flow). |
 | `alerts.create` | Set up metric alerts (e.g. "visitors drops_by 30% over 7d"). |
 | `alerts.list` / `alerts.delete` | List and remove alerts. |
 
@@ -227,7 +229,7 @@ Follows the `conversion_audit` prompt. Analyzes funnel drop-offs, segments by de
 
 **Can I self-host?** Yes. Point `CLAMP_API_URL` at your self-hosted Clamp instance, or run the stdio server inline in your own infrastructure. The MCP tools work against any Clamp API endpoint that speaks the same protocol.
 
-**Does this work for read-only audits, or can the agent make changes?** Both. The Free-tier tools are all read-only; the Pro tools (`funnels.create`, `alerts.create`, `alerts.delete`) write. Scope the connection from the dashboard if you only want read access.
+**Does this work for read-only audits, or can the agent make changes?** Both. The Free-tier tools are all read-only except for `cohorts.create` / `cohorts.delete`; the Pro tools (`funnels.create`, `funnels.delete`, `alerts.create`, `alerts.delete`) also write. Scope the connection from the dashboard if you only want read access.
 
 **Will the agent know about my custom events?** Yes. `events.observed_schema` returns the actual fired-event signatures with per-property type observations, so the agent can answer "what's in my event schema" without you pasting anything.
 

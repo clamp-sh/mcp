@@ -1281,13 +1281,18 @@ Examples:
 - non-refunded purchases → name="purchase-net", steps=["pageview:/pricing", "purchase[refunded:b=false]"]
 - blog-to-newsletter → name="blog-newsletter", steps=["pageview:/blog", "newsletter_subscribed"]
 
-Limitations: between 2 and 10 steps; step strings ≤500 chars; names ≤200 chars. Step order matters — once a session skips a step, it cannot complete later steps. Pageview pathnames match exact strings only (no wildcards). Predicate keys must be snake_case; string values may not contain ']' or '['. Number predicates require a finite value; boolean predicates require true|false|1|0. Funnel evaluation is per-session, not per-user across devices.`,
+Limitations: between 2 and 10 steps; step strings ≤500 chars; names ≤200 chars. Step order matters — once a session skips a step, it cannot complete later steps. Pageview pathnames match exact strings only (no wildcards). Predicate keys must be snake_case; string values may not contain ']' or '['. Number predicates require a finite value; boolean predicates require true|false|1|0. Funnel evaluation is per-session, not per-user across devices. Names must be unique within a project — a duplicate-name create returns 409; use \`funnels.delete\` first or pick a new name. Funnel definitions are immutable after creation; to change steps, delete and re-create.`,
       inputSchema: {
         project_id: projectIdParam,
       name: z
         .string()
+        .min(1)
+        .max(200)
+        .regex(/^[^/,[\]]+$/, {
+          message: "name can't contain '/', ',', '[', or ']'",
+        })
         .describe(
-          'A descriptive name for this funnel (e.g. "pricing-to-signup", "onboarding-flow"). Used to retrieve it later. Max 200 chars.',
+          'A descriptive display name for this funnel (e.g. "Pricing → Signup", "Onboarding flow", "pricing-to-signup"). Used to retrieve it later. Permissive charset — spaces, capitals, arrows, and punctuation are all fine. Must not contain "/", ",", "[", or "]" because those collide with URL routing and the step-DSL grammar. Max 200 chars.',
         ),
       steps: z
         .array(z.string())
@@ -1296,7 +1301,9 @@ Limitations: between 2 and 10 steps; step strings ≤500 chars; names ≤200 cha
         ),
       },
       outputSchema: funnelsCreateOutput,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      // Not idempotent: with the project_id/name UNIQUE constraint, a
+      // retry with the same name now returns 409 rather than a duplicate row.
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
     async ({ project_id, name, steps }) => {
       const p = resolveProject(project_id);
@@ -1337,6 +1344,37 @@ Limitations: returns 404 if no funnel exists by that name — call funnels.list 
       const data = await api(`/analytics/${p.projectId}/funnels${qs(rest)}`);
       const funnels = Array.isArray(data) ? data : [data];
       return out({ funnels });
+    },
+  );
+
+  // ── Tool: funnels.delete ────────────────────────────
+  server.registerTool(
+    "funnels.delete",
+    {
+      description: `Delete a saved funnel by name. Irreversible — the agent should confirm intent with the user before calling this. The underlying event data isn't touched; only the funnel definition row is removed.
+
+Since funnel definitions are immutable post-creation, deleting and re-creating is the canonical way to "edit" a funnel — change the name or the steps, call delete, then funnels.create.
+
+Examples:
+- "delete the old onboarding funnel" → name="onboarding-v1"
+- "remove the test funnel I just created" → name="test"
+
+Limitations: irreversible. Returns 404 if the funnel doesn't exist. Definition is not returned before deletion — capture it from funnels.list first if you may need to recreate it.`,
+      inputSchema: {
+        project_id: projectIdParam,
+        name: z.string().min(1).describe("Funnel name to delete."),
+      },
+      outputSchema: okOutput,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    async ({ project_id, name }) => {
+      const p = resolveProject(project_id);
+      if (isErr(p)) return p;
+      return out(
+        await api(`/analytics/${p.projectId}/funnels/${encodeURIComponent(name)}`, {
+          method: "DELETE",
+        }),
+      );
     },
   );
 
