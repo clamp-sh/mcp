@@ -1,5 +1,11 @@
 # @clamp-sh/mcp
 
+## 5.1.0
+
+### Minor Changes
+
+- [`d333c05`](https://github.com/clamp-sh/clamp/commit/d333c05735e43bbd6a545d88f00fede5ba9fd80e) Thanks [@sbj-o](https://github.com/sbj-o)! - Add `funnels.delete` — the canonical way to remove a saved funnel definition (or "edit" one, since funnel definitions are immutable post-creation; delete + re-create is the rename/restructure flow). Mirrors `cohorts.delete`. Pairs with a server-side UNIQUE(project_id, name) constraint on funnels: a duplicate-name `funnels.create` now returns 409 with a descriptive error, so callers can react instead of silently creating a duplicate. `funnels.create.annotations.idempotentHint` updated to `false` to reflect the new behaviour.
+
 ## 5.0.0
 
 ### Major Changes
