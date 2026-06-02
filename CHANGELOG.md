@@ -1,5 +1,11 @@
 # @clamp-sh/mcp
 
+## 5.2.0
+
+### Minor Changes
+
+- [`5721e38`](https://github.com/clamp-sh/clamp/commit/5721e386576bbc8e237f3042e7630bf4088b48fc) Thanks [@sbj-o](https://github.com/sbj-o)! - `cohorts.create` now returns 409 on duplicate name instead of silently overwriting the existing cohort. Matches `funnels.create`'s behavior — definitions are immutable, so rename/restructure flows are: `cohorts.delete` then re-create. `idempotentHint` flipped to `false`.
+
 ## 5.1.0
 
 ### Minor Changes
