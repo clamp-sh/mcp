@@ -89,7 +89,30 @@ function formatApiError(status: number, body: string, path: string): string {
 
 const boot = await bootstrap();
 
-const server = new McpServer({ name: "clamp", version: "0.1.0" });
+// The `instructions` string is injected into the agent's system prompt at
+// connection time per the MCP spec. Use it to nudge skill loading rather
+// than relying purely on each skill's semantic match.
+const SERVER_INSTRUCTIONS = `Clamp Analytics MCP. Use these tools to read pageviews, custom events, funnels, cohorts, retention, revenue, errors, and user journeys for a single project.
+
+Before INTERPRETING any analytics result from these tools, load the relevant analytics-skills skill(s). Skills enforce methodology — sample-size discipline, Simpson's paradox detection, causal-reasoning hygiene, mix-shift checks — that pure tool calls cannot.
+
+Skill loading map:
+- Any analytics interpretation question → load \`analytics-skills:analytics-diagnostic-method\` (the spine; load this first).
+- "Why did traffic change / drop / spike?" → also load \`analytics-skills:traffic-change-diagnosis\`.
+- "Is this metric good? Is bounce/CVR/churn normal?" → load \`analytics-skills:metric-context-and-benchmarks\`.
+- Funnel reading, channel comparison, "which is best" → load \`analytics-skills:channel-and-funnel-quality\`.
+- A/B test reading, "did the variant win?" → load \`analytics-skills:experiment-result-reader\` (+ \`bayesian-experiment-reader\` for posterior P(better)/expected-loss; + \`sequential-monitoring\` for safe peeking).
+- "Did X cause Y?" on observational data (no holdback) → load \`analytics-skills:causal-query-classifier\` first to rung-tag the question; then \`causal-dag-builder\` to make assumptions explicit; then \`causal-evidence-checklist\` (Bradford Hill) before recommending an action.
+- Cohort comparison, funnel-by-cohort, "this segment converts X% higher" → load \`analytics-skills:causal-dag-builder\` to surface confounders before declaring causation.
+- Time-series anomaly questions, contested change dates, two fingerprints matching → load \`analytics-skills:anomaly-detection-time-series\`.
+- First time talking to a new project → run \`analytics-skills:analytics-profile-setup\` once so subsequent answers calibrate to the user's industry and business model.
+
+If the user is interpreting a number AND no analytics-skills skill has been loaded, prefer to load the relevant skill and re-read with discipline rather than answer ad-hoc. The skill descriptions specify their triggers; match by question shape, not vendor.`;
+
+const server = new McpServer(
+  { name: "clamp", version: "0.1.0" },
+  { instructions: SERVER_INSTRUCTIONS },
+);
 registerClampTools(server, {
   api,
   projects: [{ id: boot.projectId, name: boot.projectName, plan: boot.plan }],

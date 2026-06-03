@@ -179,12 +179,44 @@ function qs(params: Record<string, string | number | boolean | undefined>): stri
  * wrap their payload in a meaningful key (rows, events, series, etc.) before
  * calling this.
  */
-function out(data: unknown) {
+function out(data: unknown, methodologyHint?: string) {
+  const jsonText = JSON.stringify(data, null, 2);
+  // Prepend a methodology hint when the calling tool is one whose results
+  // need interpretation discipline. The hint reaches the agent inside the
+  // active turn's tool result — strictly more reliable than the server's
+  // top-level `instructions` for nudging skill loading at point-of-use.
+  // structuredContent stays clean so programmatic consumers aren't disturbed.
+  const text = methodologyHint
+    ? `<methodology>\n${methodologyHint}\n</methodology>\n\n${jsonText}`
+    : jsonText;
   return {
-    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+    content: [{ type: "text" as const, text }],
     structuredContent: data as Record<string, unknown>,
   };
 }
+
+// ── Methodology hints (prepended to diagnostic tool results) ──
+// Each hint names the analytics-skills that the agent should load before
+// interpreting the result. Vendor-neutral methodology lives in the skills;
+// these strings are the per-tool routing nudges.
+
+const M_TRAFFIC =
+  "Load `analytics-skills:analytics-diagnostic-method` before interpreting (sample-size discipline + Simpson's paradox). For 'why did X change' questions also load `analytics-skills:traffic-change-diagnosis`. For series spanning >14 days where the change date is contested, load `analytics-skills:anomaly-detection-time-series`.";
+
+const M_FUNNEL =
+  "Load `analytics-skills:channel-and-funnel-quality` before reading these drop-offs (expected step-type ranges + mix-shift detection). Pair with `analytics-skills:analytics-diagnostic-method`. If you are about to recommend an action based on a cohort delta, load `analytics-skills:causal-dag-builder` to make confounders explicit.";
+
+const M_COHORT =
+  "Load `analytics-skills:causal-dag-builder` before claiming one cohort 'caused' a difference — observational cohort splits have intent + selection confounds. Pair with `analytics-skills:analytics-diagnostic-method`. For Bradford-Hill grading before a ship/rollback decision, load `analytics-skills:causal-evidence-checklist`.";
+
+const M_REVENUE =
+  "Load `analytics-skills:metric-context-and-benchmarks` for revenue interpretation (LTV/CAC, ARPU benchmarks by model). Pair with `analytics-skills:analytics-diagnostic-method` for mix-shift and sample-size discipline. Currencies are not auto-converted; the response returns one bucket per currency.";
+
+const M_ERROR =
+  "Load `analytics-skills:analytics-diagnostic-method` before triaging (one cause, not five guesses). Errors deduplicated by fingerprint; correlate spike windows with deploy timestamps before recommending a rollback.";
+
+const M_ENGAGEMENT =
+  "Load `analytics-skills:metric-context-and-benchmarks` for per-page-type expected ranges (a 'high' bounce on a docs page is healthy; on a pricing page it isn't). Pair with `analytics-skills:analytics-diagnostic-method`.";
 
 // ── Output schemas ───────────────────────────────────
 // Declared on every tool via registerTool's outputSchema. The SDK validates
@@ -713,7 +745,7 @@ Limitations: bounce_rate and avg_duration are derived from the SDK's pageview_en
     async ({ project_id, ...rest }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/overview${qs(rest)}`));
+      return out(await api(`/analytics/${p.projectId}/overview${qs(rest)}`), M_TRAFFIC);
     },
   );
 
@@ -977,7 +1009,7 @@ Limitations: events without any Money property contribute zero. If \`property\` 
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
       const data = (await api(`/analytics/${p.projectId}/revenue${qs(rest)}`)) as unknown[];
-      return out({ rows: data });
+      return out({ rows: data }, M_REVENUE);
     },
   );
 
@@ -1022,7 +1054,7 @@ Pairs with: \`revenue.sum(attribution_model="first_touch")\` to validate the agg
     async ({ project_id, ...rest }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/users/journey${qs(rest)}`));
+      return out(await api(`/analytics/${p.projectId}/users/journey${qs(rest)}`), M_TRAFFIC);
     },
   );
 
@@ -1088,7 +1120,7 @@ Pairs with: \`errors.groups\` (find a noisy fingerprint, then list its occurrenc
     async ({ project_id, ...rest }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/errors${qs(rest)}`));
+      return out(await api(`/analytics/${p.projectId}/errors${qs(rest)}`), M_ERROR);
     },
   );
 
@@ -1124,7 +1156,7 @@ Pairs with: \`errors.list\` (drill into a fingerprint to see individual occurren
     async ({ project_id, ...rest }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/errors/groups${qs(rest)}`));
+      return out(await api(`/analytics/${p.projectId}/errors/groups${qs(rest)}`), M_ERROR);
     },
   );
 
@@ -1164,7 +1196,7 @@ Pairs with: \`errors.groups\` (find which fingerprint is worth charting); \`traf
     async ({ project_id, ...rest }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/errors/timeline${qs(rest)}`));
+      return out(await api(`/analytics/${p.projectId}/errors/timeline${qs(rest)}`), M_ERROR);
     },
   );
 
@@ -1209,7 +1241,7 @@ Pairs with: \`errors.list\` (source of the anonymous_id and timestamp pair); \`u
     async ({ project_id, ...rest }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/errors/context${qs(rest)}`));
+      return out(await api(`/analytics/${p.projectId}/errors/context${qs(rest)}`), M_ERROR);
     },
   );
 
@@ -1259,7 +1291,7 @@ Limitations: \`metric\` and \`event\` are mutually exclusive — when \`metric\`
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
       const data = (await api(`/analytics/${p.projectId}/timeseries${qs(rest)}`)) as unknown[];
-      return out({ series: data });
+      return out({ series: data }, M_TRAFFIC);
     },
   );
 
@@ -1343,7 +1375,7 @@ Limitations: returns 404 if no funnel exists by that name — call funnels.list 
       if (isErr(p)) return p;
       const data = await api(`/analytics/${p.projectId}/funnels${qs(rest)}`);
       const funnels = Array.isArray(data) ? data : [data];
-      return out({ funnels });
+      return out({ funnels }, M_FUNNEL);
     },
   );
 
@@ -1499,7 +1531,7 @@ Pairs with: \`cohorts.compare\` to stack 2–10 cohorts side-by-side at the same
     async ({ project_id, name, periods }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/cohorts/${encodeURIComponent(name)}/retention${qs({ periods })}`));
+      return out(await api(`/analytics/${p.projectId}/cohorts/${encodeURIComponent(name)}/retention${qs({ periods })}`), M_COHORT);
     },
   );
 
@@ -1538,7 +1570,7 @@ Limitations: at most 10 cohorts per call. The same retention windows are applied
     async ({ project_id, ...rest }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/cohorts/compare${qs(rest)}`));
+      return out(await api(`/analytics/${p.projectId}/cohorts/compare${qs(rest)}`), M_COHORT);
     },
   );
 
@@ -1710,7 +1742,7 @@ Limitations: aggregates pageview events only — for custom event breakdowns use
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
       const data = (await api(`/analytics/${p.projectId}/breakdown${qs(rest)}`)) as unknown[];
-      return out({ rows: data });
+      return out({ rows: data }, M_TRAFFIC);
     },
   );
 
@@ -1744,7 +1776,7 @@ Limitations: one metric per call — for multi-metric comparison either call rep
     async ({ project_id, ...rest }) => {
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
-      return out(await api(`/analytics/${p.projectId}/compare${qs(rest)}`));
+      return out(await api(`/analytics/${p.projectId}/compare${qs(rest)}`), M_TRAFFIC);
     },
   );
 
@@ -1780,7 +1812,7 @@ Limitations: shows entry and exit only, not the full pageview chain in between (
       const p = resolveProject(project_id);
       if (isErr(p)) return p;
       const data = (await api(`/analytics/${p.projectId}/session-paths${qs(rest)}`)) as unknown[];
-      return out({ paths: data });
+      return out({ paths: data }, M_TRAFFIC);
     },
   );
 
@@ -1820,7 +1852,7 @@ Limitations: avg_engagement_seconds is null for pages without pageview_end data 
       if (isErr(p)) return p;
       const data = (await api(`/analytics/${p.projectId}/engagement${qs(rest)}`)) as unknown[];
       const wrapper = (rest as { view?: string }).view === "sections" ? { sections: data } : { pages: data };
-      return out(wrapper);
+      return out(wrapper, M_ENGAGEMENT);
     },
   );
 
