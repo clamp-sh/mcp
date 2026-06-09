@@ -1,5 +1,16 @@
 # @clamp-sh/mcp
 
+## 5.3.0
+
+### Minor Changes
+
+- [`d4974ff`](https://github.com/clamp-sh/clamp/commit/d4974ff3c80801bc3ee3d9ac8d81ff18a10ed56f) Thanks [@sbj-o](https://github.com/sbj-o)! - MCP server now nudges agents to load the relevant `analytics-skills` skill before interpreting tool results.
+
+  - **Server `instructions` field.** Injected into the agent's system prompt at connection time. Maps user question shapes to skill loads (analytics-diagnostic-method for any interpretation, traffic-change-diagnosis for "why did X change", causal-dag-builder for "did X cause Y" on observational data, etc.).
+  - **Per-tool methodology hints in tool responses.** Diagnostic read-tools (`traffic.overview`, `traffic.timeseries`, `traffic.breakdown`, `traffic.compare`, `users.journey`, `sessions.paths`, `pages.engagement`, `funnels.list`, `cohorts.retention`, `cohorts.compare`, `revenue.sum`, `errors.list`, `errors.groups`, `errors.timeline`, `errors.context`) now prepend a `<methodology>…</methodology>` block to their text content with the specific skill(s) to load. `structuredContent` stays clean for programmatic consumers.
+
+  The hints are routing nudges — the methodology itself lives in the vendor-neutral skills. Skills remain usable without Clamp connected.
+
 ## 5.2.0
 
 ### Minor Changes
