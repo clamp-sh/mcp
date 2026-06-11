@@ -105,11 +105,13 @@ Get your API key from the Clamp dashboard under **Settings → API Keys**. Keys 
 | `events.list` | Custom event counts with property filtering and grouping. |
 | `events.observed_schema` | The actual fired-event signature with per-property type observations. Diff against a local `event-schema.yaml` to surface schema drift. |
 | `events.property_values` | Top distinct string-typed values a property has taken on a specific event. Use to discover the value space before defining a cohort filter or running `events.list` with `property=`. |
-| `revenue.sum` | Sum revenue from Money-typed event properties. Split by currency, optionally grouped by any dimension. |
+| `revenue.sum` | Sum Money-typed event properties. Split by currency, group by any dimension, switch to first-touch via `attribution_model`. Drill-in filters: `plan`, `product`, `first_touch_dim` + `first_touch_value`. |
+| `revenue.summary` | The whole Revenue tab in one call: revenue per currency, customers, orders, AOV, LTV, MRR (running balance) + ARR, per-plan rollup (where `mrr_contribution` is the cumulative MRR balance per plan, not the in-period delta), per-product rollup, prior-period comparison, and mode flags (`is_subscription`, `has_one_time`) so callers can render conditionally. |
+| `revenue.retention` | Cohort revenue retention on MRR-on-MRR math. Per window: `mature_size`, `retained`, `retention_rate`, `mrr_at_d`, `baseline_mrr_mature`, `nrr` (net revenue retention; >1.0 = net expansion). Anchored at the customer's first `subscription_started`. |
+| `revenue.timeseries` | Plot one revenue metric per bucket. `metric` accepts `revenue` (Money sum), `mrr` (running balance, picks up from prior period), `customers` (distinct paying), or `transactions` (event count). |
 | `sessions.paths` | Aggregate session paths: top entry → exit pairs with pages per session and duration. |
 | `users.journey` | Chronological session-and-event reconstruction for one anonymous ID. |
 | `cohorts.create` / `cohorts.list` / `cohorts.retention` / `cohorts.compare` / `cohorts.delete` | Define cohorts by event + period + filter; query retention curves; compare 2–10 cohorts side-by-side on the same retention windows; delete a saved cohort by name (definitions are immutable, so delete + re-create is the rename/restructure flow). |
-| `events.property_values` | Top distinct string-typed values a property has taken on a specific event. Use to discover the value space before defining a cohort filter or running `events.list` with `property=`. |
 | `errors.list` / `errors.groups` / `errors.timeline` / `errors.context` | Recent errors, fingerprint-grouped errors with affected-user counts, error rate over time, and breadcrumbs leading to a single error. |
 | `projects.list` | List all projects this credential can access. |
 | `docs.search` | Keyword-search the Clamp docs index. |
@@ -135,6 +137,10 @@ Get your API key from the Clamp dashboard under **Settings → API Keys**. Keys 
 **dimension** (`breakdown` only) — see the `breakdown` row above for valid values.
 
 **view** (`pages.engagement` only) — `"summary"` (default), `"engagement"`, or `"sections"`. `"sections"` requires `pathname`.
+
+**Revenue filters** (`revenue.sum`, `revenue.timeseries`) — `plan` and `product` filter to one subscription tier or one-time product. `first_touch_dim` (one of `channel`, `referrer_host`, `utm_campaign`, `utm_source`, `utm_medium`, `country`) + `first_touch_value` filter to customers whose earliest session matched that dim. `attribution_model="first_touch"` on `revenue.sum` groups by first-touch dim instead of conversion-time dim.
+
+**Revenue metric** (`revenue.timeseries` only) — `"revenue"` (default), `"mrr"` (running balance), `"customers"`, or `"transactions"`.
 
 ## Prompts
 

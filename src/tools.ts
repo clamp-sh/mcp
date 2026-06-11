@@ -311,6 +311,107 @@ const revenueSumOutput = {
   rows: z.array(revenueRowSchema),
 };
 
+const planRowSchema = z.object({
+  plan: z.string(),
+  revenue: z.number(),
+  mrr_contribution: z.number(),
+  customers: z.number(),
+});
+
+const retentionWindowSchema = z.object({
+  /** Window string echoed back from the request, e.g. "30d" / "60d". */
+  window: z.string(),
+  /** Numeric days for the window. */
+  days: z.number(),
+  /** Members old enough to have reached this window (anchor + days <= now).
+   *  Use this to dim windows where most of the cohort isn't mature yet. */
+  mature_size: z.number(),
+  /** Mature members with positive MRR balance at day d (still paying). */
+  retained: z.number(),
+  /** retained / mature_size. Null when mature_size = 0. */
+  retention_rate: z.number().nullable(),
+  /** Sum of cumulative MRR (from anchor through day d) across mature members. */
+  mrr_at_d: z.number(),
+  /** Sum of baseline MRR (at anchor) across mature members. Denominator
+   *  for the NRR ratio. */
+  baseline_mrr_mature: z.number(),
+  /** Net revenue retention = mrr_at_d / baseline_mrr_mature. Above 1.0
+   *  means net expansion (upgrades outweigh churn). Null when no mature
+   *  members yet. */
+  nrr: z.number().nullable(),
+});
+
+const revenueRetentionOutput = {
+  cohort: z.object({ event: z.string(), period: z.string() }),
+  /** Number of distinct cohort members (anonymous_ids that triggered the cohort event). */
+  size: z.number(),
+  /** Sum of baseline MRR (at anchor) across the full cohort, in the dominant currency. */
+  baseline_mrr: z.number(),
+  currency: z.string(),
+  retention: z.array(retentionWindowSchema),
+};
+
+const productRowSchema = z.object({
+  /** Group key: the `product` reserved property when present, otherwise the
+   *  event name (e.g. "purchase", "checkout_completed"). */
+  product: z.string(),
+  revenue: z.number(),
+  /** Count of revenue events. One-time revenue typically has 1 transaction
+   *  per customer; recurring renewals are tracked separately in `plans`. */
+  transactions: z.number(),
+  customers: z.number(),
+});
+
+const revenueComparisonEntrySchema = z.object({
+  /** Formatted percent-change string like "+12.5%" / "-3.4%" / "0%" / "New". */
+  change: z.string(),
+});
+
+const revenueSummaryOutput = {
+  period: z.string(),
+  currency: z.string(),
+  /** Total cash collected in the period in the dominant currency. */
+  revenue: z.number(),
+  /** Distinct paying customers in the period (user_id if identified, else anonymous_id). */
+  customers: z.number(),
+  /** Count of revenue events in the period — every $subscription_started,
+   *  renewal, purchase, or other revenue-bearing event counts once. */
+  orders: z.number(),
+  /** Average order value — revenue / orders. */
+  aov: z.number(),
+  /** Lifetime value — mean cumulative revenue per paying customer to date. */
+  ltv: z.number(),
+  /** Running MRR balance at period end (cumulative sum of mrr_delta). Null
+   *  when the project tracks no subscription revenue. */
+  mrr: z.number().nullable(),
+  /** ARR = MRR × 12. Null when MRR is null. */
+  arr: z.number().nullable(),
+  /** True if any plan in the period carries non-zero mrr_contribution OR
+   *  the running MRR balance is non-zero. */
+  is_subscription: z.boolean(),
+  /** True if any non-subscription revenue event landed in the period. Mixed
+   *  sellers (SaaS + courses, e-comm + memberships) will have BOTH flags
+   *  set and both `plans` and `products` populated. */
+  has_one_time: z.boolean(),
+  /** Total revenue per currency over the period. First entry is the dominant currency. */
+  total_revenue: z.array(z.object({ currency: z.string(), amount: z.number() })),
+  /** Per-metric % change vs the prior period of equal length. */
+  comparison: z.object({
+    revenue: revenueComparisonEntrySchema.nullable(),
+    customers: revenueComparisonEntrySchema.nullable(),
+    orders: revenueComparisonEntrySchema.nullable(),
+    aov: revenueComparisonEntrySchema.nullable(),
+    ltv: revenueComparisonEntrySchema.nullable(),
+    mrr: revenueComparisonEntrySchema.nullable(),
+    arr: revenueComparisonEntrySchema.nullable(),
+  }),
+  /** Subscription breakdown by `plan` property. Empty when not subscription-shaped. */
+  plans: z.array(planRowSchema),
+  /** One-time breakdown by `product` property (falls back to event name).
+   *  Empty when the project tracks no one-time revenue. */
+  products: z.array(productRowSchema),
+};
+
 const journeySessionSchema = z.object({
   session_id: z.string(),
   is_first_touch: z.boolean(),
@@ -444,12 +545,29 @@ const sessionsPathsOutput = {
   paths: z.array(sessionPathRowSchema),
 };
 
+const scrollDistributionSchema = z
+  .object({
+    /** Number of pageview_end events that recorded a max_scroll_pct value. */
+    samples: z.number(),
+    /** % of those samples that reached each scroll depth marker. Cumulative
+     *  (a 100% reader is also counted at 75/50/25). */
+    pct_reached_25: z.number().nullable(),
+    pct_reached_50: z.number().nullable(),
+    pct_reached_75: z.number().nullable(),
+    pct_reached_100: z.number().nullable(),
+  })
+  .nullable();
+
 const pageEngagementRowSchema = z.object({
   pathname: z.string(),
   pageviews: z.number(),
   visitors: z.number(),
   avg_engagement_seconds: z.number().nullable().optional(),
   bounce_rate: z.number().nullable().optional(),
+  /** Mean max_scroll_pct (0-100) across pageview_end events on this path. */
+  avg_max_scroll: z.number().nullable().optional(),
+  /** Distribution of pageview_end events by max scroll depth reached. */
+  scroll_distribution: scrollDistributionSchema.optional(),
 });
 
 const sectionRowSchema = z.object({
@@ -753,7 +871,7 @@ Limitations: bounce_rate and avg_duration are derived from the SDK's pageview_en
   server.registerTool(
     "events.list",
     {
-      description: `Get custom event counts. Without a \`name\` filter, returns every event name in the period with its total count and unique-visitor count (excludes SDK-internal events — \`pageview\`, \`pageview_end\`, \`web_vital\`, \`section_viewed\`, and \`$error\` — since they aren't "custom" in any user-meaningful sense). To see one of those, pass it explicitly via \`name\`. With \`compare=true\` (only meaningful on the unfiltered list), each row also carries \`prev_count\` and \`prev_visitors\` from the equal-length previous period — events absent now but present before appear with count=0 (the "dead event" signal). With a \`name\` filter, returns the count for that single event, optionally filtered by a custom property key/value pair and grouped by another property key. Custom events are tracked client-side via clamp.track("event_name", { key: "value" }) or server-side via @clamp-sh/analytics/server.
+      description: `Lists custom events (user-defined). Excludes all $-prefixed system and canonical revenue events (\`$pageview\`, \`$pageview_end\`, \`$web_vital\`, \`$section_viewed\`, \`$error\`, \`$subscription_started\`, \`$subscription_canceled\`, …). Use revenue.* tools for billing events. Without a \`name\` filter, returns every custom event name in the period with its total count and unique-visitor count. To inspect a $-prefixed system event explicitly, pass it via \`name\` (e.g. name="$error"). With \`compare=true\` (only meaningful on the unfiltered list), each row also carries \`prev_count\` and \`prev_visitors\` from the equal-length previous period — events absent now but present before appear with count=0 (the "dead event" signal). With a \`name\` filter, returns the count for that single event, optionally filtered by a custom property key/value pair and grouped by another property key. Custom events are tracked client-side via clamp.track("event_name", { key: "value" }) or server-side via @clamp-sh/analytics/server.
 
 Property values can be strings, numbers, or booleans (each stored in a separate column). When filtering or grouping by a numeric or boolean property, set \`value_type\` / \`group_by_type\` so the lookup hits the right column — otherwise the default ("string") will silently miss native number/boolean data. Use the project's \`event-schema.yaml\` to know each property's type.
 
@@ -830,7 +948,7 @@ Limitations: only one property/value pair per call. group_by only works when a n
   server.registerTool(
     "events.observed_schema",
     {
-      description: `Return what's actually firing into ingest as a structured signature, for diffing against the project's authored \`event-schema.yaml\`. Different shape from the YAML — this is observation, not declaration.
+      description: `Return what's actually firing into ingest as a structured signature, for diffing against the project's authored \`event-schema.yaml\`. Scoped to custom user-defined events; all $-prefixed system and canonical revenue events are excluded by default. Different shape from the YAML — this is observation, not declaration.
 
 Response shape:
 \`\`\`
@@ -860,7 +978,7 @@ Examples:
 - "did the spec drift this week" → period="7d"
 - "include the SDK's automatic events too" → include_pageviews=true
 
-Limitations: returns keys + types only, no property *values*. \`occurrences\` is row-level (each event firing counts), not unique visitors. Excludes SDK-internal events (\`pageview\`, \`pageview_end\`, \`web_vital\`, \`section_viewed\`, \`$error\`) by default since the SDK owns their schema.
+Limitations: returns keys + types only, no property *values*. \`occurrences\` is row-level (each event firing counts), not unique visitors. Custom user-defined events only — all $-prefixed system and canonical revenue events (\`$pageview\`, \`$pageview_end\`, \`$web_vital\`, \`$section_viewed\`, \`$error\`, \`$subscription_started\`, \`$subscription_canceled\`, …) are excluded by default since the SDK owns their schema. Set \`include_pageviews=true\` to include them.
 
 Pairs with: \`events.list\` for per-event volume context (this tool also returns \`count\`, but \`events.list\` supports filters and grouping); the local \`event-schema.yaml\` for declared-vs-observed diff.`,
       inputSchema: {
@@ -870,7 +988,7 @@ Pairs with: \`events.list\` for per-event volume context (this tool also returns
           .coerce
           .boolean()
           .optional()
-          .describe("Include SDK-internal events (pageview, pageview_end, web_vital, section_viewed, $error) in the output. Defaults to false."),
+          .describe("Include $-prefixed system and canonical revenue events ($pageview, $pageview_end, $web_vital, $section_viewed, $error, $subscription_started, $subscription_canceled, …) in the output. Defaults to false."),
       },
       outputSchema: eventsObservedSchemaOutput,
       annotations: { readOnlyHint: true },
@@ -1010,6 +1128,88 @@ Limitations: events without any Money property contribute zero. If \`property\` 
       if (isErr(p)) return p;
       const data = (await api(`/analytics/${p.projectId}/revenue${qs(rest)}`)) as unknown[];
       return out({ rows: data }, M_REVENUE);
+    },
+  );
+
+  // ── Tool: revenue.summary ──────────────────────────
+  server.registerTool(
+    "revenue.summary",
+    {
+      description: `One call that returns the canonical revenue dashboard. Bundles every KPI tile + per-plan + per-product rollup + prior-period comparison into one round-trip. Use this for "how's revenue doing?" questions.
+
+Returns:
+- \`total_revenue\` per currency (sum of every Money-typed property in the period)
+- \`revenue\` — total in the dominant currency (a flat number)
+- \`customers\` — distinct paying users (user_id when identified, else anonymous_id)
+- \`orders\` — count of revenue events in the period
+- \`aov\` — revenue / orders
+- \`ltv\` — mean cumulative revenue per paying customer to date
+- \`mrr\` — running balance of mrr_delta through period end (null when not subscription-shaped)
+- \`arr\` — mrr × 12 (null when mrr is null)
+- \`is_subscription\` — true when any plan carries non-zero mrr_contribution OR the project's running MRR is non-zero
+- \`has_one_time\` — true when any non-subscription revenue event landed in the period (mixed sellers have both flags set)
+- \`plans[]\` — per-plan rollup: revenue (in period), mrr_contribution (CUMULATIVE MRR balance per plan AT PERIOD END — forward-looking, not the in-period delta), customers
+- \`products[]\` — per-product rollup: groups by the reserved \`product\` property, falls back to event name when product isn't set
+- \`comparison\` — per-metric % change vs the prior period of equal length (revenue, customers, orders, aov, ltv, mrr, arr)
+
+Examples:
+- "how's MRR this month" → period="30d", read \`mrr\` + \`comparison.mrr.change\`
+- "which plan has the most paying customers" → read \`plans[]\`, sort by \`customers\`
+- "ARPU" → \`revenue / customers\` (no top-level field; divide client-side)
+- "top one-time products by revenue" → read \`products[]\`, already sorted desc
+- "do we have any subscription customers" → read \`is_subscription\`
+
+Limitations: MRR/ARR/per-plan mrr_contribution require events to carry the reserved \`mrr_delta\` numeric property (set automatically by clamp.revenue() with billing="monthly" or "annual"). MRR is reported only in the project's dominant currency; multi-currency MRR is a future scope. \`customers\` uses user_id when present (clamp.identify() was called) and falls back to anonymous_id otherwise — counts are honest but can over-count if a paying customer uses two devices without identifying. For per-channel/per-campaign revenue, use revenue.sum with group_by + attribution_model="first_touch". For cohort retention with NRR, use revenue.retention.`,
+      inputSchema: {
+        project_id: projectIdParam,
+        period: periodParam,
+        ...commonFilterShape,
+      },
+      outputSchema: revenueSummaryOutput,
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project_id, ...rest }) => {
+      const p = resolveProject(project_id);
+      if (isErr(p)) return p;
+      return out(await api(`/analytics/${p.projectId}/revenue/summary${qs(rest)}`));
+    },
+  );
+
+  // ── Tool: revenue.retention ────────────────────────
+  server.registerTool(
+    "revenue.retention",
+    {
+      description: `Cohort revenue retention. Anchors each customer at their first cohort event (default: \`$subscription_started\`), then reports user retention + dollar retention at each anniversary window (default: 7d, 30d, 60d, 90d). Use this to answer "are customers sticking around?" and "is revenue churning, flat, or expanding?" in one round-trip.
+
+Math is MRR-on-MRR: for each member, mrr_at_d is the cumulative sum of mrr_delta from anchor through anchor + d (the member's current MRR balance at that point). Retained members are mature members with mrr_at_d > 0. NRR = sum(mrr_at_d) / sum(baseline_mrr) across the same mature cohort — above 1.0 means net expansion (upgrades > churn), below 1.0 means contraction.
+
+\`mature_size\` < \`size\` for windows the cohort isn't old enough to reach yet (e.g. a 90d window for a 30d-old cohort). Use \`mature_size\` to dim early windows or label them "cohort not yet mature".
+
+Examples:
+- "what's our 30d retention" → read retention[].window=="30d".retention_rate (null when no mature members)
+- "are we expanding or contracting" → compare nrr across windows
+- "how many of last quarter's signups are still paying" → cohort_period="90d", read retention[].window=="90d"
+
+Limitations: anchor is the user's FIRST cohort event in the period — re-subscribers after a cancel won't get a new anchor. The math assumes mrr_delta is set on \`$subscription_started\` / \`$subscription_canceled\` / plan-change events; events without mrr_delta don't affect the running balance. Canonical billing events are $-prefixed on the wire — pass \`cohort_event="$subscription_started"\` (not bare \`subscription_started\`) to anchor on them.`,
+      inputSchema: {
+        project_id: projectIdParam,
+        /** Event name that defines the cohort. Default "$subscription_started". */
+        cohort_event: z.string().min(1).max(200).optional(),
+        /** Cohort period (matches the dashboard period, e.g. "90d", "30d"). */
+        cohort_period: z.string().min(1).max(64).optional(),
+        /** Optional property filter on the cohort event. */
+        cohort_filter_property: z.string().max(128).optional(),
+        cohort_filter_value: z.string().max(512).optional(),
+        /** Comma-separated windows. Default "7d,30d,60d,90d". */
+        windows: z.string().max(128).optional(),
+      },
+      outputSchema: revenueRetentionOutput,
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project_id, ...rest }) => {
+      const p = resolveProject(project_id);
+      if (isErr(p)) return p;
+      return out(await api(`/analytics/${p.projectId}/revenue/retention${qs(rest)}`));
     },
   );
 
@@ -1272,7 +1472,7 @@ Limitations: \`metric\` and \`event\` are mutually exclusive — when \`metric\`
         .string()
         .optional()
         .describe(
-          'Event name to chart raw counts of (defaults to "pageview"). Ignored when `metric` is set. Use any custom event name to see its trend over time.',
+          'Event name to chart raw counts of (defaults to "$pageview"). Ignored when `metric` is set. Pass any custom event name (e.g. "signup") or $-prefixed system/canonical event (e.g. "$error", "$subscription_started") to see its trend over time.',
         ),
       granularity: z
         .enum(["hour", "day", "week", "month"])
@@ -1823,7 +2023,7 @@ Limitations: shows entry and exit only, not the full pageview chain in between (
       description: `Per-page metrics with a selectable detail level. The \`view\` parameter chooses what comes back:
 
 - view="summary" (default): pathname, pageviews, visitors. Cheap; use as the standard "top pages" call.
-- view="engagement": adds avg_engagement_seconds (active tab time from the SDK's pageview_end beacon) and bounce_rate (% of single-page sessions that started on this path). Use to answer "which pages hold attention" or "which pages bounce".
+- view="engagement": adds avg_engagement_seconds (active tab time from the SDK's pageview_end beacon), bounce_rate (% of single-page sessions that started on this path), avg_max_scroll (mean max scroll % the user reached on the page), and scroll_distribution (cumulative % of pageview_end events that reached 25/50/75/100 scroll depth — answers "how far do visitors actually get down this page"). Use to answer "which pages hold attention", "which pages bounce", or "are visitors reading past the fold".
 - view="sections": returns per-section view counts for the specified pathname. Requires \`pathname\` to be set. Each section is a data-clamp-section element on that page, counted once per session when at least 40% scrolls into view. Use to answer "which parts of /pricing get seen" or "is the FAQ being read".
 
 Examples:
