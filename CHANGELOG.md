@@ -1,5 +1,11 @@
 # @clamp-sh/mcp
 
+## 5.5.0
+
+### Minor Changes
+
+- [`fbaba09`](https://github.com/clamp-sh/clamp/commit/fbaba0996c5cbe3eafb0a4a4531bcb6f05cf0440) Thanks [@sbj-o](https://github.com/sbj-o)! - Add `search.queries` and `search.landing_pages` tools. These surface Google Search Console metrics and join them with post-click behaviour, so an agent can answer which search terms and landing pages actually convert, not just which ones get clicks. Requires connecting Search Console from the dashboard.
+
 ## 5.4.0
 
 ### Minor Changes
