@@ -271,6 +271,36 @@ const eventsListOutput = {
   events: z.array(eventCountRowSchema),
 };
 
+const searchQueriesOutput = {
+  queries: z.array(
+    z.object({
+      query: z.string(),
+      clicks: z.number(),
+      impressions: z.number(),
+      /** Click-through rate, 0–1. */
+      ctr: z.number(),
+      /** Average position in search results (1 = top). */
+      position: z.number(),
+    }),
+  ),
+};
+
+const searchLandingPagesOutput = {
+  pages: z.array(
+    z.object({
+      page: z.string(),
+      pathname: z.string(),
+      clicks: z.number(),
+      impressions: z.number(),
+      position: z.number(),
+      /** Organic-search sessions that landed on this page (post-click, from Clamp). */
+      organic_sessions: z.number(),
+      /** Of those sessions, how many fired the conversion event. */
+      conversions: z.number(),
+    }),
+  ),
+};
+
 const observationSchema = z.object({
   type: z.string(),
   occurrences: z.number(),
@@ -2053,6 +2083,77 @@ Limitations: avg_engagement_seconds is null for pages without pageview_end data 
       const data = (await api(`/analytics/${p.projectId}/engagement${qs(rest)}`)) as unknown[];
       const wrapper = (rest as { view?: string }).view === "sections" ? { sections: data } : { pages: data };
       return out(wrapper, M_ENGAGEMENT);
+    },
+  );
+
+  // ── Tool: search.queries ───────────────────────────
+  server.registerTool(
+    "search.queries",
+    {
+      description: `Google Search Console query metrics — the pre-click side of search. Returns the search terms that drove clicks to the site, with clicks, impressions, CTR (0–1), and average position (1 = top of results), over the period. Sourced from the project's connected Search Console property, synced daily; data lags ~2 days, same as Search Console itself.
+
+Use for "what are we ranking for", "which queries drive the most clicks", "where do we sit on [term]".
+
+Examples:
+- "top search queries this month" → period="28d", read \`queries\` (already sorted by clicks)
+- "what position are we for 'X'" → scan \`queries\` for X, read \`position\`
+
+Limitations: only queries with at least one click in the period appear — Search Console omits zero-click impressions and anonymized rare queries, so totals won't match site-wide impressions. Requires a connected Search Console property (returns an empty list if none is connected). For what those clicks did AFTER landing — sessions and conversions — use \`search.landing_pages\`.`,
+      inputSchema: {
+        project_id: projectIdParam,
+        period: periodParam,
+        limit: limitParam,
+      },
+      outputSchema: searchQueriesOutput,
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project_id, ...rest }) => {
+      const p = resolveProject(project_id);
+      if (isErr(p)) return p;
+      const data = (await api(`/analytics/${p.projectId}/search/queries${qs(rest)}`)) as unknown[];
+      return out({ queries: data });
+    },
+  );
+
+  // ── Tool: search.landing_pages ─────────────────────
+  server.registerTool(
+    "search.landing_pages",
+    {
+      description: `The pre-click → post-click join: Search Console metrics per landing page, joined to what those organic-search visitors actually did. For each page that gets search traffic, returns clicks / impressions / average position (from Search Console) alongside \`organic_sessions\` and \`conversions\` (from Clamp's own data). This answers the question Search Console alone can't: not "which pages get search clicks" but "which search traffic actually converts".
+
+The join is page-level by necessity — Google strips the search query after the click, so conversions attribute to the landing PAGE, not to a specific query. \`conversion_event\` defaults to "signup_completed"; set it to whatever event marks a conversion for this project.
+
+Use for "which search pages convert", "are our top-ranking pages actually working", "where is search traffic leaking".
+
+Examples:
+- "which pages get search clicks but don't convert" → read \`pages\`, find high clicks + low conversions
+- "do our docs pages convert organic search" → scan \`pages\` for /docs paths
+- "conversions from search on /pricing" → conversion_event set, find the /pricing row
+
+Limitations: page-level only — query→conversion cannot be attributed (see above). Search Console pages are matched to Clamp landing pages by URL path, so pages differing only by query string may not line up. \`organic_sessions\` counts sessions whose ENTRY channel is organic search. Requires a connected Search Console property.`,
+      inputSchema: {
+        project_id: projectIdParam,
+        period: periodParam,
+        limit: limitParam,
+        conversion_event: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('Event name that counts as a conversion. Default "signup_completed".'),
+      },
+      outputSchema: searchLandingPagesOutput,
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project_id, ...rest }) => {
+      const p = resolveProject(project_id);
+      if (isErr(p)) return p;
+      const data = (await api(
+        `/analytics/${p.projectId}/search/landing-pages${qs(rest)}`,
+      )) as unknown[];
+      return out(
+        { pages: data },
+        "Page-level join: Google strips the search query after the click, so conversions attribute to the landing page, not a specific query.",
+      );
     },
   );
 
