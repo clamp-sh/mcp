@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.clamp-sh/mcp",
+  "description": "Analytics MCP server for Clamp Analytics: traffic, pages, events, revenue, errors, funnels, cohorts, search queries, and alerts, queryable by any MCP client.",
+  "version": "5.5.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@clamp-sh/mcp",
+      "version": "5.5.1",
+      "transport": { "type": "stdio" }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.clamp.sh/mcp"
+    }
+  ]
+}
