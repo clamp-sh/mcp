@@ -1,5 +1,11 @@
 # @clamp-sh/mcp
 
+## 5.5.2
+
+### Patch Changes
+
+- [`737bd98`](https://github.com/clamp-sh/clamp/commit/737bd980c022d05379ca3302db61aa8bdd595356) Thanks [@sbj-o](https://github.com/sbj-o)! - Escape the `[` inside the funnel-name regex character class. The unescaped form is valid ECMA regex but invalid in RE2-family engines, so the serialized `pattern` made the Claude API reject the entire tool list (400 "input_schema is invalid") whenever `funnels.create` was loaded — bricking the client session.
+
 ## 5.5.1
 
 ### Patch Changes
