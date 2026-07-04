@@ -1,5 +1,11 @@
 # @clamp-sh/mcp
 
+## 5.5.1
+
+### Patch Changes
+
+- [`7834c8b`](https://github.com/clamp-sh/clamp/commit/7834c8ba89ee76195831b77e6310e9a091dce8b0) Thanks [@sbj-o](https://github.com/sbj-o)! - Add the `mcpName` package.json field (`io.github.clamp-sh/mcp`) so the official MCP registry can verify npm ownership when the server is published there.
+
 ## 5.5.0
 
 ### Minor Changes
