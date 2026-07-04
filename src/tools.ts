@@ -1550,7 +1550,12 @@ Limitations: between 2 and 10 steps; step strings ≤500 chars; names ≤200 cha
         .string()
         .min(1)
         .max(200)
-        .regex(/^[^/,[\]]+$/, {
+        // The '[' escape is redundant in ECMA regex but required once this
+        // serializes to a JSON Schema `pattern`: RE2-family validators (like
+        // the Claude API's) reject an unescaped '[' inside a character class,
+        // which 400s the entire tool list on the client.
+        // eslint-disable-next-line no-useless-escape
+        .regex(/^[^/,\[\]]+$/, {
           message: "name can't contain '/', ',', '[', or ']'",
         })
         .describe(
